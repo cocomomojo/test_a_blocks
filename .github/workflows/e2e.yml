@@ -161,6 +161,8 @@ jobs:
         publish_dir: ./gh-pages
         keep_files: true
         destination_dir: reports/${{ github.run_number }}
+        allow_empty_commit: true
+        force_orphan: false
 
     - name: Comment PR with Test Results
       if: github.event_name == 'pull_request' && always()
