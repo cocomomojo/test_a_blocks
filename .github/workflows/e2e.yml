@@ -17,6 +17,12 @@ on:
           - '20.x'
           - '22.x'
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  pull-requests: write
+
 jobs:
   test-e2e-chrome:
     timeout-minutes: 30
@@ -75,6 +81,87 @@ jobs:
         path: test-results/
         retention-days: 30
 
+    - name: Prepare GitHub Pages Report
+      if: always()
+      run: |
+        mkdir -p gh-pages
+        
+        # Copy Playwright report
+        if [ -d "playwright-report" ]; then
+          cp -r playwright-report gh-pages/
+          echo "✅ Playwright report copied"
+        fi
+        
+        # Create index page with links
+        cat > gh-pages/index.html << 'EOF'
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>E2E Test Results</title>
+          <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); min-height: 100vh; padding: 20px; }
+            .container { max-width: 900px; margin: 0 auto; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+            h1 { color: #0366d6; border-bottom: 4px solid #0366d6; padding-bottom: 15px; margin-bottom: 30px; }
+            .report-link { display: inline-block; margin: 15px 0; padding: 14px 24px; background: #0366d6; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; transition: all 0.3s; }
+            .report-link:hover { background: #0256c7; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(3, 102, 214, 0.3); }
+            .info { background: #f6f8fa; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 5px solid #0366d6; }
+            .info p { margin: 8px 0; color: #333; }
+            .timestamp { color: #666; font-size: 14px; }
+            ul { margin: 10px 0 10px 20px; }
+            li { margin: 5px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <h1>🧪 E2E Test Results Report</h1>
+            
+            <div class="info">
+              <p><strong>Framework:</strong> Playwright (Chrome only)</p>
+              <p><strong>Total Tests:</strong> 28 E2E tests</p>
+              <p><strong>Test Scenarios:</strong></p>
+              <ul>
+                <li>Authentication (Login/Register/Logout)</li>
+                <li>Chat Communication</li>
+                <li>File Upload (S3 Emulation)</li>
+                <li>AI Response Generation (Bedrock Emulation)</li>
+              </ul>
+            </div>
+            
+            <h2 style="color: #333; margin-top: 30px; margin-bottom: 15px;">📊 Reports</h2>
+            <a href="playwright-report/index.html" class="report-link">📈 View Detailed Playwright HTML Report</a>
+            
+            <div class="info" style="margin-top: 30px;">
+              <p><strong>Generated:</strong> <span id="timestamp"></span></p>
+              <p><strong>CI Run:</strong> <span id="run-id"></span></p>
+            </div>
+          </div>
+          
+          <script>
+            const timestamp = new Date().toLocaleString();
+            document.getElementById('timestamp').textContent = timestamp;
+            
+            const params = new URLSearchParams(window.location.search);
+            const runId = params.get('run') || 'View in Actions tab';
+            document.getElementById('run-id').textContent = runId;
+          </script>
+        </body>
+        </html>
+        EOF
+        
+        echo "✅ Index page created"
+
+    - name: Deploy to GitHub Pages
+      if: always() && github.ref == 'refs/heads/main'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./gh-pages
+        keep_files: true
+        destination_dir: reports/${{ github.run_number }}
+
     - name: Comment PR with Test Results
       if: github.event_name == 'pull_request' && always()
       uses: actions/github-script@v7
@@ -83,13 +170,15 @@ jobs:
           const fs = require('fs');
           const testResultsPath = 'test-results';
           
-          let message = '## E2E Test Results (Chrome)\n\n';
+          let message = '## 🧪 E2E Test Results (Chrome)\n\n';
           
           if (fs.existsSync(testResultsPath)) {
             const files = fs.readdirSync(testResultsPath);
             if (files.length > 0) {
               message += `✅ Tests completed on Node.js ${{ env.node-version }}\n`;
-              message += `📊 Results: [View Report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n`;
+              message += `📊 Reports:\n`;
+              message += `- [GitHub Actions Run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})\n`;
+              message += `- [Playwright Report](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/reports/${{ github.run_number }})\n`;
             }
           } else {
             message += `⚠️ Could not find test results\n`;
@@ -179,7 +268,9 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         
         if [ "${{ needs.test-e2e-chrome.result }}" == "success" ]; then
-          echo "### Result: ✅ All E2E Tests Passed (Node.js ${{ env.node-version }})" >> $GITHUB_STEP_SUMMARY
+          echo "### Result: ✅ All E2E Tests Passed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📊 [View Detailed Report on GitHub Pages](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/reports/${{ github.run_number }})" >> $GITHUB_STEP_SUMMARY
         else
           echo "### Result: ❌ Some E2E Tests Failed" >> $GITHUB_STEP_SUMMARY
         fi
