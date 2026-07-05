@@ -109,7 +109,6 @@ jobs:
 
     - name: Verify AWS Blocks Backend Health
       run: |
-        cd backend
         timeout 30 npm run start:backend:local &
         sleep 5
         
