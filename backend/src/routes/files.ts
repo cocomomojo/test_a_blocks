@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { fileStorage } from '../blocks/index.js';
 
 const router = Router();
+const uploadedFiles = new Map<string, { fileKey: string; fileName: string; chatId: string; fileType: string }>();
 
 interface UploadFileRequest extends Request {
   body: {
@@ -28,9 +29,9 @@ router.post('/upload', async (req: UploadFileRequest, res: Response) => {
     const fileId = `file_${Date.now()}`;
     const fileKey = `chats/${chatId}/${fileId}_${fileName}`;
 
-    // S3 Block にアップロード
-    // ローカルでは .bb-data/ に保存される
-    // 本番環境では S3 に保存される
+    // Storage Block を使って保存（S3 相当）
+    await fileStorage.put(fileKey, fileContent);
+    uploadedFiles.set(fileId, { fileKey, fileName, chatId, fileType });
 
     res.status(201).json({
       success: true,
@@ -59,11 +60,24 @@ router.get('/download/:fileId', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'fileId is required' });
     }
 
-    // S3 から取得
+    const meta = uploadedFiles.get(fileId);
+
+    if (!meta) {
+      return res.status(404).json({ error: 'File not found' });
+    }
+
+    const content = await fileStorage.get(meta.fileKey);
+
+    if (!content) {
+      return res.status(404).json({ error: 'File content not found' });
+    }
+
     res.json({
       success: true,
       fileId,
-      content: 'file content here',
+      fileName: meta.fileName,
+      fileType: meta.fileType,
+      content: content.toString('utf-8'),
     });
   } catch (error) {
     console.error('Download error:', error);
@@ -81,6 +95,12 @@ router.delete('/:fileId', async (req: Request, res: Response) => {
 
     if (!fileId) {
       return res.status(400).json({ error: 'fileId is required' });
+    }
+
+    const meta = uploadedFiles.get(fileId);
+    if (meta) {
+      await fileStorage.delete(meta.fileKey);
+      uploadedFiles.delete(fileId);
     }
 
     res.json({
@@ -105,10 +125,19 @@ router.get('/chat/:chatId', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'chatId is required' });
     }
 
+    const files = Array.from(uploadedFiles.entries())
+      .filter(([, meta]) => meta.chatId === chatId)
+      .map(([fileId, meta]) => ({
+        fileId,
+        fileName: meta.fileName,
+        fileType: meta.fileType,
+        url: `/api/files/download/${fileId}`,
+      }));
+
     res.json({
       success: true,
-      files: [],
-      count: 0,
+      files,
+      count: files.length,
     });
   } catch (error) {
     console.error('List files error:', error);

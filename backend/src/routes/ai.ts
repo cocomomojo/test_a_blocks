@@ -26,20 +26,17 @@ router.post('/generate', async (req: GenerateResponseRequest, res: Response) => 
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // ローカルエミュレーションでは、簡易的な応答を返す
-    // 本番環境では Bedrock に統合され、実際の AI モデルが使用される
-
     const lastUserMessage = messages
       .reverse()
       .find((m) => m.role === 'user')?.content || '';
 
-    // 簡略的なレスポンス生成ロジック
-    const response = generateMockResponse(lastUserMessage);
+    // AI Block を経由して応答生成（Bedrock 相当）
+    const response = await aiModel.invoke(lastUserMessage);
 
     res.json({
       success: true,
       response,
-      model: 'bedrock-local-emulation',
+      model: 'bedrock-local-emulation-mock',
       generatedAt: Date.now(),
     });
   } catch (error) {
@@ -47,30 +44,6 @@ router.post('/generate', async (req: GenerateResponseRequest, res: Response) => 
     res.status(500).json({ error: 'Failed to generate response' });
   }
 });
-
-/**
- * ローカルエミュレーション用の簡略レスポンス生成
- */
-function generateMockResponse(userInput: string): string {
-  const responses: Record<string, string> = {
-    hi: 'こんにちは！何かお手伝いできることはありますか？',
-    hello: 'Hello! How can I assist you today?',
-    help: 'I can help you with various tasks. What do you need?',
-    thanks: 'You\'re welcome! Is there anything else I can help with?',
-    bye: 'Goodbye! Have a great day!',
-  };
-
-  const lowerInput = userInput.toLowerCase().trim();
-
-  for (const [key, value] of Object.entries(responses)) {
-    if (lowerInput.includes(key)) {
-      return value;
-    }
-  }
-
-  // デフォルト応答
-  return `I received your message: "${userInput}". This is a local emulation response. In production, this would be powered by Bedrock AI.`;
-}
 
 /**
  * POST /api/ai/stream
@@ -90,20 +63,13 @@ router.post('/stream', async (req: GenerateResponseRequest, res: Response) => {
     res.setHeader('Connection', 'keep-alive');
 
     const lastUserMessage = messages.reverse().find((m) => m.role === 'user')?.content || '';
-    const fullResponse = generateMockResponse(lastUserMessage);
+    const chunks = await aiModel.invokeStreaming(lastUserMessage);
 
-    // テキストを文字単位でストリーミング
-    let index = 0;
-    const interval = setInterval(() => {
-      if (index < fullResponse.length) {
-        res.write(`data: ${JSON.stringify({ chunk: fullResponse[index] })}\n\n`);
-        index++;
-      } else {
-        res.write('data: [DONE]\n\n');
-        clearInterval(interval);
-        res.end();
-      }
-    }, 50);
+    for await (const chunk of chunks) {
+      res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+    }
+    res.write('data: [DONE]\n\n');
+    res.end();
   } catch (error) {
     console.error('Stream response error:', error);
     res.status(500).json({ error: 'Failed to stream response' });

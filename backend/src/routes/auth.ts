@@ -30,9 +30,8 @@ router.post('/register', async (req: RegisterRequest, res: Response) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // ローカルでのユーザー作成
-    // 本番環境では Cognito に統合
-    const userId = `user_${Date.now()}`;
+    // Auth Block を経由してユーザー登録（Cognito 相当）
+    const { userId } = await auth.signUp(email, password);
 
     await userTable.put({
       userId,
@@ -65,10 +64,9 @@ router.post('/login', async (req: LoginRequest, res: Response) => {
       return res.status(400).json({ error: 'Missing email or password' });
     }
 
-    // 本番環境では Cognito でのパスワード検証
-    // ローカルでは簡略的な実装
+    // Auth Block を経由して認証（Cognito 相当）
+    const { token } = await auth.signIn(email, password);
     const sessionId = `session_${Date.now()}`;
-    const token = Buffer.from(`${email}:${sessionId}`).toString('base64');
 
     await sessionTable.put({
       sessionId,
@@ -95,7 +93,12 @@ router.post('/login', async (req: LoginRequest, res: Response) => {
  */
 router.post('/logout', async (req: Request, res: Response) => {
   try {
-    // ローカルではセッション削除（簡略実装）
+    const token = req.headers.authorization?.split(' ')[1];
+
+    if (token) {
+      await auth.signOut(token);
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error('Logout error:', error);
@@ -115,14 +118,15 @@ router.get('/verify', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    // トークンデコード（簡略実装）
-    const decoded = Buffer.from(token, 'base64').toString('utf-8');
-    const [email, sessionId] = decoded.split(':');
+    const verified = await auth.verifyToken(token);
+
+    if (!verified) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
 
     res.json({
       valid: true,
-      email,
-      sessionId,
+      userId: verified.userId,
     });
   } catch (error) {
     console.error('Verify error:', error);

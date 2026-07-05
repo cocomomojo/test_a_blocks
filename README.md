@@ -50,12 +50,174 @@ flowchart TD
 
 | AWS サービス | ローカルでのエミュレート方式 | 実装ポイント |
 |---|---|---|
-| Cognito | Base64 トークン発行 + セッションテーブル保存 | `backend/src/routes/auth.ts`, `backend/src/aws-blocks/bb-auth.ts` |
+| Cognito | `Auth` Block (`signUp/signIn/verifyToken/signOut`) を利用 | `backend/src/routes/auth.ts`, `backend/src/aws-blocks/bb-auth.ts` |
 | DynamoDB | `Map` ベースのインメモリテーブル (`put/get/query/delete`) | `backend/src/aws-blocks/bb-distributed-table.ts` |
-| S3 | `Map<string, Buffer>` でファイル保持 | `backend/src/aws-blocks/bb-storage.ts`, `backend/src/routes/files.ts` |
-| Bedrock | ルールベースのモック応答を返却 | `backend/src/routes/ai.ts`, `backend/src/aws-blocks/bb-ai.ts` |
+| S3 | `Storage` Block (`put/get/delete/list`) でファイル保持 | `backend/src/aws-blocks/bb-storage.ts`, `backend/src/routes/files.ts` |
+| Bedrock | `AI` Block (`invoke/invokeStreaming`) を利用 | `backend/src/routes/ai.ts`, `backend/src/aws-blocks/bb-ai.ts` |
 | SES | 実送信せずコンソールログ出力 | `backend/src/routes/email.ts` |
 | Lambda | Express ルーティングで処理実行 | `backend/src/index.ts` + 各 route |
+
+## 各エミュレートのコード例（公式ドキュメントの考え方に沿った書き方）
+
+AWS Blocks の説明に合わせて、ここでは次の順で例を示します。
+
+1. Block を宣言する
+2. アプリコードから Block を呼び出す
+
+### 🧱 Block 宣言例（本リポジトリ）
+
+```ts
+// backend/src/blocks/index.ts
+import { DistributedTable } from '../aws-blocks/bb-distributed-table';
+import { Storage } from '../aws-blocks/bb-storage';
+import { Auth } from '../aws-blocks/bb-auth';
+import { AI } from '../aws-blocks/bb-ai';
+
+export const chatTable = new DistributedTable({
+    name: 'ChatMessages',
+    partitionKey: { name: 'chatId', type: 'string' },
+    sortKey: { name: 'timestamp', type: 'number' },
+});
+
+export const fileStorage = new Storage({ name: 'ChatFiles' });
+export const auth = new Auth({ name: 'ChatBotAuth' });
+export const aiModel = new AI({ name: 'ChatBotAI', modelType: 'text-generation' });
+```
+
+### 🔐 Cognito 相当（Auth）利用例
+
+```ts
+// backend/src/aws-blocks/bb-auth.ts
+async signIn(email: string, password: string): Promise<{ token: string }> {
+    return { token: `token-${Date.now()}` };
+}
+
+// backend/src/routes/auth.ts
+const { token } = await auth.signIn(email, password);
+const verified = await auth.verifyToken(token);
+```
+
+### 🗃️ DynamoDB 相当（DistributedTable）利用例
+
+```ts
+// backend/src/routes/messages.ts
+await chatTable.put({
+    chatId,
+    timestamp,
+    messageId,
+    userId,
+    content,
+    role,
+});
+
+// backend/src/aws-blocks/bb-distributed-table.ts
+async query(partitionKeyValue: string): Promise<any[]> {
+    const prefix = partitionKeyValue + '#';
+    return Array.from(this.data.values()).filter((item) => {
+        const key = this.getKey(item);
+        return key.startsWith(prefix) || key === partitionKeyValue;
+    });
+}
+```
+
+### 📦 S3 相当（Storage）利用例
+
+```ts
+// backend/src/aws-blocks/bb-storage.ts
+async put(key: string, data: Buffer | string): Promise<void> {
+    const buffer = typeof data === 'string' ? Buffer.from(data) : data;
+    this.files.set(key, buffer);
+}
+
+async get(key: string): Promise<Buffer | null> {
+    return this.files.get(key) || null;
+}
+
+// backend/src/routes/files.ts
+await fileStorage.put(fileKey, fileContent);
+const content = await fileStorage.get(meta.fileKey);
+```
+
+### 🤖 Bedrock 相当（AI）利用例
+
+```ts
+// backend/src/aws-blocks/bb-ai.ts
+async invoke(prompt: string): Promise<string> {
+    return `Mock AI response to: "${prompt}"`;
+}
+
+// backend/src/routes/ai.ts
+const response = await aiModel.invoke(lastUserMessage);
+const chunks = await aiModel.invokeStreaming(lastUserMessage);
+```
+
+### 📧 SES 相当（メール通知）利用例
+
+```ts
+// backend/src/routes/email.ts
+console.log(`
+[EMAIL NOTIFICATION]
+ID: ${emailId}
+To: ${to}
+Subject: ${subject}
+Body: ${body}
+`);
+```
+
+### ⚙️ Lambda 相当（実行モデル）利用例
+
+```ts
+// backend/src/index.ts
+app.use('/api/auth', authRouter);
+app.use('/api/chats', chatsRouter);
+app.use('/api/messages', messagesRouter);
+app.use('/api/files', filesRouter);
+app.use('/api/ai', aiRouter);
+app.use('/api/email', emailRouter);
+```
+
+### ✅ 実装整合性チェック結果（README更新時点）
+
+| 項目 | 判定 | 内容 |
+|---|---|---|
+| Auth Block (`auth`) の利用 | ✅ 一致 | `/api/auth/register/login/logout/verify` から `signUp/signIn/signOut/verifyToken` を呼び出し |
+| Storage Block (`fileStorage`) の利用 | ✅ 一致 | `/api/files/upload/download/delete/chat` で `put/get/delete` とメタデータ管理を実行 |
+| AI Block (`aiModel`) の利用 | ✅ 一致 | `/api/ai/generate` で `invoke`、`/api/ai/stream` で `invokeStreaming` を使用 |
+| DistributedTable (`chatTable`) の利用 | ✅ 一致 | `messages` や `chats` の一部で `put` を実際に使用 |
+
+## Workflow 実行後の GitHub Pages URL
+
+E2E workflow が `main` で完了すると、Playwright レポートは GitHub Pages に公開されます。
+### URL 形式
+
+```text
+https://<owner>.github.io/<repo>/reports/<run_number>/
+```
+
+### このリポジトリの例
+
+```text
+https://cocomomojo.github.io/test_a_blocks/reports/<run_number>/
+```
+
+補足:
+
+- Pull Request コメントにも同URLが自動投稿されます。
+- GitHub Actions の Summary にも同URLが出力されます。
+
+### 最新レポートURLを自動で開く（CLI）
+
+```bash
+RUN_NUMBER=$(gh run list --workflow e2e.yml --branch main --limit 1 --json number -q '.[0].number')
+URL="https://cocomomojo.github.io/test_a_blocks/reports/${RUN_NUMBER}/"
+echo "$URL"
+"$BROWSER" "$URL"
+```
+
+補足:
+
+- `gh auth login` 済みであることが前提です。
+- URLだけ確認したい場合は `echo "$URL"` まででOKです。
 
 ## スクリーンショットで見る機能とE2E検証
 
@@ -221,6 +383,9 @@ npm run test:e2e:ui
 
 ## 参考リンク
 
+- [AWS Blocks 公式プロダクトページ](https://aws.amazon.com/jp/products/developer-tools/blocks/)
+- [AWS Blocks 公式GitHubリポジトリ](https://github.com/aws-devtools-labs/aws-blocks)
+- [AWS Blocks Developer Guide: What is AWS Blocks?](https://docs.aws.amazon.com/blocks/latest/devguide/what-is-blocks.html)
 - [AWS Blocks 紹介記事 (Zenn)](https://zenn.dev/aws_japan/articles/aws-blocks-ai-agent-intro)
 - [AWS Blocks 調査レポート(ポちのツール情報収集サイト)](https://aegisfleet.github.io/tool-survey-report/reports/aws-blocks/)
 - [Playwright Documentation](https://playwright.dev/)
