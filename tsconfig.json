@@ -10,16 +10,11 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"],
-      "@backend/*": ["./backend/src/*"],
-      "@frontend/*": ["./frontend/src/*"]
-    }
+    "baseUrl": "."
   },
-  "include": ["backend/src/**/*", "frontend/src/**/*", "e2e/**/*"],
-  "exclude": ["node_modules", "dist", "build"]
+  "files": [],
+  "references": [
+    { "path": "./backend" },
+    { "path": "./frontend" }
+  ]
 }
