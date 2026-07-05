@@ -9,3 +9,7 @@ build/
 .DS_Store
 playwright-report/
 test-results/
+backend/src/**/*.js
+backend/src/**/*.js.map
+backend/src/**/*.d.ts
+backend/src/**/*.d.ts.map
