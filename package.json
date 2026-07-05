@@ -1,0 +1,56 @@
+{
+  "name": "test-a-blocks",
+  "version": "0.0.1",
+  "description": "Chatbot with AWS Blocks local emulation and E2E testing",
+  "type": "module",
+  "main": "backend/dist/index.js",
+  "scripts": {
+    "dev": "npm run dev:all",
+    "dev:all": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && tsx watch src/index.ts",
+    "dev:frontend": "cd frontend && vite",
+    "start:backend:local": "cd backend && NODE_ENV=development tsx src/index.ts",
+    "start:frontend": "cd frontend && npm run build && vite preview",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:backend": "cd backend && tsc && node dist/index.js",
+    "build:frontend": "cd frontend && vite build",
+    "test:e2e": "playwright test",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:ui": "playwright test --ui",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "chatbot",
+    "aws-blocks",
+    "e2e-testing",
+    "playwright"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "concurrently": "^8.2.2",
+    "eslint": "^8.54.0",
+    "prettier": "^3.1.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.7"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "optionalDependencies": {
+    "@aws-blocks/bb-ai": "^0.0.1",
+    "@aws-blocks/bb-auth": "^0.0.1",
+    "@aws-blocks/bb-distributed-table": "^0.0.1",
+    "@aws-blocks/bb-storage": "^0.0.1"
+  }
+}
