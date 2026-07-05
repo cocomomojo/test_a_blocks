@@ -1,372 +1,233 @@
 # test_a_blocks
 
-AWS Blocks を使用したチャットボット E2E テストシステム
+AWS Blocks を使ったチャットアプリのローカルエミュレーション + E2E テスト検証プロジェクトです。
 
-## 概要
+## これは何をするプロジェクト？
 
-**GitHub Actions 上でAWSサービスをエミュレートし、完全なE2Eテストを実行するシステム**
+本番 AWS を直接使わずに、ローカルで AWS っぽい挙動を再現しながらアプリを開発し、Playwright で E2E を回します。
 
-このプロジェクトは、AWS Blocks（ローカルエミュレーション機能）を活用して、本番のAWSアカウント不要でGitHub Actions上でE2Eテストを実行します。
+- 🧪 E2E で画面操作を自動検証
+- ☁️ AWS サービス相当の機能をローカルでエミュレート
+- 🔁 同じ API 設計のまま本番構成へ寄せやすい
 
-### 特徴
+## まず全体像をつかむ
 
-- ✅ **AWS アカウント不要**: ローカルエミュレーション機能により、GitHub Actions 上でも AWS を模倣
-- ✅ **同一コードでデプロイ可能**: ローカルテスト後、同じコードで本番 AWS にデプロイ可能
-- ✅ **複数 AWS サービス対応**: DynamoDB、S3、Cognito、Bedrock、Lambda、SES
-- ✅ **自動 CI/CD**: GitHub Actions で自動実行、テスト結果をアーティファクトとして保存
-
----
-
-## プロジェクト構成
-
+```mermaid
+flowchart TD
+    A[👤 User Browser] -->|Login / Chat / Upload| B[🌐 Frontend React + Vite]
+    B -->|REST API| C[🧩 Backend Express]
+    C --> D[🔐 Auth mock - Cognito 相当]
+    C --> E[🗃️ DistributedTable - DynamoDB 相当]
+    C --> F[📦 Storage - S3 相当]
+    C --> G[🤖 AI mock - Bedrock 相当]
+    C --> H[📧 Email log - SES 相当]
+    I[🎭 Playwright E2E] -->|画面操作と検証| B
 ```
-test_a_blocks/
-├── backend/                    # Express + AWS Blocks SDK
-│   ├── src/
-│   │   ├── blocks/            # AWS Blocks リソース定義
-│   │   │   └── index.ts       # DynamoDB, S3, Cognito, Bedrock, SES
-│   │   ├── routes/            # API エンドポイント
-│   │   │   ├── auth.ts        # 認証 (Cognito emulate)
-│   │   │   ├── chats.ts       # チャット管理 (DynamoDB emulate)
-│   │   │   ├── messages.ts    # メッセージ CRUD
-│   │   │   ├── files.ts       # ファイル管理 (S3 emulate)
-│   │   │   ├── ai.ts          # AI 応答生成 (Bedrock emulate)
-│   │   │   └── email.ts       # メール送信 (SES emulate)
-│   │   └── index.ts           # Express サーバーメイン
-│   ├── package.json
-│   └── tsconfig.json
-├── frontend/                   # React + Vite
-│   ├── src/
-│   │   ├── api/
-│   │   │   └── client.ts      # Backend API クライアント
-│   │   ├── pages/
-│   │   │   ├── LoginPage.tsx  # 認証ページ
-│   │   │   └── ChatPage.tsx   # チャット画面
-│   │   ├── components/
-│   │   │   └── FileUpload.tsx # ファイルアップロード
-│   │   ├── styles/
-│   │   │   ├── auth.css       # 認証ページスタイル
-│   │   │   └── chat.css       # チャット画面スタイル
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   └── index.css
-│   ├── index.html
-│   ├── vite.config.ts
-│   ├── package.json
-│   └── tsconfig.json
-├── e2e/                        # Playwright E2E テスト
-│   ├── auth.spec.ts           # 認証フローテスト
-│   ├── chat.spec.ts           # チャット機能テスト
-│   ├── file-upload.spec.ts    # ファイルアップロードテスト
-│   └── ai-response.spec.ts    # AI応答生成テスト
-├── .github/
-│   └── workflows/
-│       └── e2e.yml            # GitHub Actions ワークフロー
-├── playwright.config.ts       # Playwright 設定
-├── tsconfig.json              # ルート TypeScript 設定
-├── package.json               # ルート package.json
-└── README.md                  # このファイル
-```
-
----
 
 ## 技術スタック
 
-| レイヤー | 技術 | 用途 |
-|---------|------|------|
-| **Frontend** | React 18.2 + Vite | UI フレームワーク |
-| **Backend** | Express.js + AWS Blocks SDK | API サーバー + AWS リソース定義 |
-| **E2E Test** | Playwright | ブラウザ自動テスト |
-| **認証** | AWS Blocks / Cognito | ユーザー認証 |
-| **DB** | AWS Blocks / DynamoDB | チャット履歴、ユーザー情報 |
-| **ストレージ** | AWS Blocks / S3 | ファイル保存 |
-| **AI** | AWS Blocks / Bedrock | AI 応答生成（ローカルは簡易実装） |
-| **通知** | AWS Blocks / SES | メール送信 |
-| **CI/CD** | GitHub Actions | 自動テスト実行 |
+| レイヤー | 技術 | 役割 |
+|---|---|---|
+| Frontend | React 18 + Vite | ログイン画面、チャット画面、ファイルアップロード UI |
+| Backend | Express + TypeScript | API 提供、ローカルエミュレーション統合 |
+| E2E | Playwright | UI の自動テスト |
+| CI | GitHub Actions | テスト自動実行とレポート保存 |
 
----
+## AWS サービス利用とエミュレーション早見表
 
-## エミュレートされる AWS サービス
+### 1) どの AWS サービスを何に使っているか
 
-### 1. **DynamoDB** (分散テーブル)
-- **用途**: チャット履歴、ユーザー情報、セッション管理
-- **ローカル実装**: ファイルシステム (`.bb-data/`) に JSON で保存
-- **本番**: DynamoDB に自動切り替わり
+| AWS サービス | このアプリでの用途 | 関連 API / 画面 |
+|---|---|---|
+| Amazon Cognito | ユーザー登録・ログイン・トークン検証 | `/api/auth/*` / Login 画面 |
+| Amazon DynamoDB | チャット、メッセージ、ユーザー、セッション情報の保存 | `/api/chats`, `/api/messages` |
+| Amazon S3 | チャットへのファイル添付保存 | `/api/files/upload` / Chat 画面 |
+| Amazon Bedrock | ユーザー投稿に対する AI 応答 | `/api/ai/generate` / Chat 画面 |
+| Amazon SES | 通知メール送信 | `/api/email/*` |
+| AWS Lambda | API ハンドラや非同期処理の実行イメージ | Express ルート処理で代替 |
 
-### 2. **S3** (オブジェクトストレージ)
-- **用途**: チャット内のファイルアップロード
-- **ローカル実装**: ファイルシステムに保存
-- **本番**: S3 に自動切り替わり
+### 2) どうエミュレートしているか（実装ベース）
 
-### 3. **Cognito** (ユーザー認証)
-- **用途**: ログイン・登録
-- **ローカル実装**: インメモリ認証トークン管理
-- **本番**: Cognito に自動切り替わり
+| AWS サービス | ローカルでのエミュレート方式 | 実装ポイント |
+|---|---|---|
+| Cognito | Base64 トークン発行 + セッションテーブル保存 | `backend/src/routes/auth.ts`, `backend/src/aws-blocks/bb-auth.ts` |
+| DynamoDB | `Map` ベースのインメモリテーブル (`put/get/query/delete`) | `backend/src/aws-blocks/bb-distributed-table.ts` |
+| S3 | `Map<string, Buffer>` でファイル保持 | `backend/src/aws-blocks/bb-storage.ts`, `backend/src/routes/files.ts` |
+| Bedrock | ルールベースのモック応答を返却 | `backend/src/routes/ai.ts`, `backend/src/aws-blocks/bb-ai.ts` |
+| SES | 実送信せずコンソールログ出力 | `backend/src/routes/email.ts` |
+| Lambda | Express ルーティングで処理実行 | `backend/src/index.ts` + 各 route |
 
-### 4. **Bedrock** (生成AI)
-- **用途**: チャットボットの AI 応答生成
-- **ローカル実装**: 固定テキストレスポンス（簡易実装）
-- **本番**: Bedrock LLM に自動切り替わり
+## スクリーンショットで見る機能とE2E検証
 
-### 5. **SES** (メール送信)
-- **用途**: ユーザー通知メール
-- **ローカル実装**: コンソールログに出力
-- **本番**: SES に自動切り替わり
+以下の画像は Playwright を使ってローカル起動中の画面から取得しています。
 
-### 6. **Lambda** (サーバーレスコンピュート)
-- **用途**: 非同期処理トリガー
-- **ローカル実装**: Node.js 内部で実行
-- **本番**: Lambda に自動切り替わり
+### ログイン画面
 
----
+![ログイン画面](docs/screenshots/01-login-page.png)
+
+| 画面で見えるもの | ここでエミュレートされる AWS 相当 | E2E で検証していること |
+|---|---|---|
+| Email/Password 入力 + Login ボタン | Cognito 相当の認証フロー | ログイン表示、必須入力、ログイン成功、localStorage 保存、ログアウト |
+
+### 登録画面（切り替え）
+
+![登録画面](docs/screenshots/02-register-page.png)
+
+| 画面で見えるもの | ここでエミュレートされる AWS 相当 | E2E で検証していること |
+|---|---|---|
+| Name 項目の表示切り替え | Cognito 相当の登録処理 | Login/Register の切替、登録後にログイン画面へ戻ること |
+
+### チャット画面（初期表示）
+
+![チャット初期画面](docs/screenshots/03-chat-initial.png)
+
+| 画面で見えるもの | ここでエミュレートされる AWS 相当 | E2E で検証していること |
+|---|---|---|
+| メッセージ欄、送信欄、Logout | DynamoDB 相当のチャット/メッセージ管理 | チャット画面描画、入力欄表示、複数メッセージ処理、時刻表示 |
+
+### チャット + AI応答
+
+![AI応答付きチャット画面](docs/screenshots/04-chat-with-ai-response.png)
+
+| 画面で見えるもの | ここでエミュレートされる AWS 相当 | E2E で検証していること |
+|---|---|---|
+| ユーザーメッセージとAI返信 | Bedrock 相当の応答生成 | 送信後に assistant メッセージが表示されること、応答が空でないこと |
+
+### ファイル添付後の画面
+
+![ファイルアップロード後の画面](docs/screenshots/05-file-uploaded.png)
+
+| 画面で見えるもの | ここでエミュレートされる AWS 相当 | E2E で検証していること |
+|---|---|---|
+| `File uploaded` メッセージ | S3 相当の保存処理 | 添付ボタン表示、アップロード成功表示、複数ファイル/拡張子対応 |
+
+## E2E テスト仕様マップ
+
+| テストファイル | 主な対象 | 代表的な確認項目 |
+|---|---|---|
+| `e2e/auth.spec.ts` | 認証 | ログイン表示、登録切替、ログイン成功、トークン保存、ログアウト |
+| `e2e/chat.spec.ts` | チャット基本機能 | メッセージ送受信、複数送信、時刻表示、送信中の状態 |
+| `e2e/file-upload.spec.ts` | ファイル添付 | 添付 UI、アップロード成功、複数/複数形式対応 |
+| `e2e/ai-response.spec.ts` | AI 応答 | 応答生成、履歴継続、あいさつ/質問への返答 |
 
 ## セットアップ
 
-### 前提条件
-- Node.js 18.x 以上
-- npm 9.x 以上
+### 前提
+
+- Node.js 18 以上
+- npm 9 以上
 
 ### インストール
 
 ```bash
-# ルート依存インストール
 npm install
-
-# Backend 依存インストール
 cd backend && npm install
-
-# Frontend 依存インストール
-cd frontend && npm install
-
-# Playwright ブラウザインストール
+cd ../frontend && npm install
 cd .. && npx playwright install
 ```
 
----
+## 実行手順
 
-## 実行方法
-
-### ローカルでの開発実行
-
-#### 1. **Backend 起動** (ターミナル 1)
-```bash
-npm run start:backend:local
-# または
-cd backend && npm run dev
-```
-
-出力例:
-```
-╔════════════════════════════════════════╗
-║  AWS Blocks Chatbot Backend            ║
-║  Express Server Listening              ║
-╚════════════════════════════════════════╝
-
-Environment: development
-Port: 3001
-Base URL: http://localhost:3001
-
-Endpoints:
-  - /api/auth      (Authentication)
-  - /api/chats     (Chat Management)
-  - /api/messages  (Message Handling)
-  - /api/files     (File Upload/Storage)
-  - /api/ai        (AI Response Generation)
-  - /api/email     (Email Notifications)
-```
-
-#### 2. **Frontend 起動** (ターミナル 2)
-```bash
-cd frontend && npm run dev
-# アクセス: http://localhost:3000
-```
-
-#### 3. **E2E テスト実行** (Chrome のみ)
-```bash
-# 全テスト実行 (Chrome)
-npm run test:e2e
-
-# UI モードで実行（テストの様子を動画で確認）
-npm run test:e2e:ui
-
-# デバッグモード
-npm run test:e2e:debug
-```
-
-### ワンコマンドで全体起動
+### 開発起動
 
 ```bash
 # Backend + Frontend を同時起動
 npm run dev:all
-
-# 別ターミナルで E2E テスト実行
-npm run test:e2e
 ```
 
----
+### E2E 実行
 
-## GitHub Actions ワークフロー
+```bash
+# 全E2E
+npm run test:e2e
 
-### 自動実行条件
-- `main` ブランチへの Push
-- `develop` ブランチへの Push
-- Pull Request (main, develop 対象)
+# UIデバッグ
+npm run test:e2e:ui
 
-### ワークフロー内容
+# ステップ実行デバッグ
+npm run test:e2e:debug
+```
 
-`.github/workflows/e2e.yml` で以下を実行：
+## API 一覧
 
-1. **Node.js セットアップ** (18.x, 20.x で複数実行)
-2. **依存インストール**
-3. **Playwright ブラウザインストール** (Chrome のみ)
-4. **E2E テスト実行** (Chrome のみ)
-5. **テスト結果をアーティファクトとして保存**
-
-### テスト結果確認
-
-GitHub Actions > Workflows > E2E Tests で実行履歴を確認：
-- 📊 **Playwright Report**: HTML レポート、ビデオ、スクリーンショット
-- 📝 **Test Results**: JSON フォーマットのテスト結果
-
----
-
-## API エンドポイント
-
-### 認証 API
+### Auth
 
 | Method | Endpoint | 説明 |
-|--------|----------|------|
+|---|---|---|
 | POST | `/api/auth/register` | ユーザー登録 |
-| POST | `/api/auth/login` | ユーザーログイン |
+| POST | `/api/auth/login` | ログイン |
 | POST | `/api/auth/logout` | ログアウト |
 | GET | `/api/auth/verify` | トークン検証 |
 
-### チャット管理 API
+### Chats
 
 | Method | Endpoint | 説明 |
-|--------|----------|------|
-| POST | `/api/chats` | 新規チャット作成 |
-| GET | `/api/chats` | チャット一覧取得 |
-| GET | `/api/chats/:chatId` | チャット詳細取得 |
+|---|---|---|
+| POST | `/api/chats` | チャット作成 |
+| GET | `/api/chats` | チャット一覧 |
+| GET | `/api/chats/:chatId` | チャット詳細 |
 | PUT | `/api/chats/:chatId` | チャット更新 |
 | DELETE | `/api/chats/:chatId` | チャット削除 |
 
-### メッセージ API
+### Messages
 
 | Method | Endpoint | 説明 |
-|--------|----------|------|
+|---|---|---|
 | POST | `/api/messages` | メッセージ送信 |
-| GET | `/api/messages` | メッセージ一覧取得 |
-| PUT | `/api/messages/:messageId` | メッセージ編集 |
+| GET | `/api/messages` | メッセージ一覧 |
+| PUT | `/api/messages/:messageId` | メッセージ更新 |
 | DELETE | `/api/messages/:messageId` | メッセージ削除 |
 
-### ファイル API (S3 Emulation)
+### Files
 
 | Method | Endpoint | 説明 |
-|--------|----------|------|
+|---|---|---|
 | POST | `/api/files/upload` | ファイルアップロード |
-| GET | `/api/files/download/:fileId` | ファイルダウンロード |
-| DELETE | `/api/files/:fileId` | ファイル削除 |
-| GET | `/api/files/chat/:chatId` | チャット内ファイル一覧 |
+| GET | `/api/files/download/:fileId` | ダウンロード |
+| DELETE | `/api/files/:fileId` | 削除 |
+| GET | `/api/files/chat/:chatId` | チャットのファイル一覧 |
 
-### AI API (Bedrock Emulation)
-
-| Method | Endpoint | 説明 |
-|--------|----------|------|
-| POST | `/api/ai/generate` | AI レスポンス生成 |
-| POST | `/api/ai/stream` | AI レスポンス ストリーミング |
-| GET | `/api/ai/models` | 利用可能モデル一覧 |
-
-### メール API (SES Emulation)
+### AI
 
 | Method | Endpoint | 説明 |
-|--------|----------|------|
+|---|---|---|
+| POST | `/api/ai/generate` | AI応答生成 |
+| POST | `/api/ai/stream` | ストリーミング応答 |
+| GET | `/api/ai/models` | モデル一覧 |
+
+### Email
+
+| Method | Endpoint | 説明 |
+|---|---|---|
 | POST | `/api/email/send` | メール送信 |
-| GET | `/api/email/status/:emailId` | メール送信ステータス確認 |
-| POST | `/api/email/notify-user` | ユーザー通知メール送信 |
-
----
-
-## E2E テストシナリオ
-
-### 1. **auth.spec.ts** - 認証フローテスト
-- ✅ ログインページ表示
-- ✅ エラーハンドリング（必須項目チェック）
-- ✅ ユーザー登録フロー
-- ✅ ログインフロー
-- ✅ トークン保存 (localStorage)
-- ✅ ログアウトフロー
-
-### 2. **chat.spec.ts** - チャット機能テスト
-- ✅ チャット画面表示
-- ✅ メッセージ送受信
-- ✅ 複数メッセージハンドリング
-- ✅ タイムスタンプ表示
-- ✅ ローディング状態
-- ✅ AI 応答受信
-
-### 3. **file-upload.spec.ts** - ファイルアップロードテスト
-- ✅ ファイルアップロードボタン表示
-- ✅ ファイルアップロード実行
-- ✅ 複数ファイル対応
-- ✅ 異なるファイル形式対応 (PNG, PDF, JSON)
-- ✅ アップロード後の表示確認
-
-### 4. **ai-response.spec.ts** - AI 応答生成テスト
-- ✅ AI レスポンス生成
-- ✅ ローディング状態表示
-- ✅ コンテキスト保持（会話履歴）
-- ✅ グリーティング応答
-- ✅ メッセージ履歴管理
-- ✅ レスポンス表示
-
----
+| GET | `/api/email/status/:emailId` | 送信ステータス |
+| POST | `/api/email/notify-user` | ユーザー通知 |
 
 ## トラブルシューティング
 
-### Issue: Backend 起動時に `port 3001 is already in use`
+### `port 3001 is already in use`
 
 ```bash
-# ポート確認
 lsof -i :3001
-
-# プロセス終了
 kill -9 <PID>
-
-# または別ポートで起動
-PORT=3002 npm run start:backend:local
 ```
 
-### Issue: Playwright テスト失敗
+### Playwright が失敗する
 
 ```bash
-# ブラウザ再インストール
 npx playwright install --with-deps
-
-# UI モードでデバッグ
 npm run test:e2e:ui
 ```
 
-### Issue: AWS Blocks モジュールが見つからない
+## 参考リンク
 
-AWS Blocks はまだパブリックプレビュー段階です。以下を確認：
-- AWS 公式ドキュメント: https://aws.amazon.com/jp/
-- Zenn: https://zenn.dev/aws_japan/articles/aws-blocks-ai-agent-intro
-
-実装時に AWS Blocks が利用可能になったら、`package.json` の `optionalDependencies` を `dependencies` に移動してください。
-
----
+- [AWS Blocks 紹介記事 (Zenn)](https://zenn.dev/aws_japan/articles/aws-blocks-ai-agent-intro)
+- [AWS Blocks 調査レポート(ポちのツール情報収集サイト)](https://aegisfleet.github.io/tool-survey-report/reports/aws-blocks/)
+- [Playwright Documentation](https://playwright.dev/)
+- [Express](https://expressjs.com/)
+- [React](https://react.dev/)
+- [Vite](https://vitejs.dev/)
 
 ## ライセンス
 
 MIT
-
----
-
-## 参考資料
-
-- [AWS Blocks - Zenn (日本語)](https://zenn.dev/aws_japan/articles/aws-blocks-ai-agent-intro)
-- [Playwright Documentation](https://playwright.dev/)
-- [Express.js](https://expressjs.com/)
-- [React Documentation](https://react.dev/)
-- [Vite](https://vitejs.dev/)
