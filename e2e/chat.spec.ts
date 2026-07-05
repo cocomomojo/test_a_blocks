@@ -29,7 +29,7 @@ test.describe('Chat Flow', () => {
     await sendButton.click();
 
     // Message should appear in chat
-    await expect(page.locator('text=Hello, chatbot!')).toBeVisible();
+    await expect(page.locator('.message.user .message-content')).toContainText('Hello, chatbot!');
 
     // Wait for AI response
     await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 10000 });
