@@ -1,0 +1,24 @@
+import ts from 'typescript';
+
+const config = {
+  compilerOptions: {
+    target: ts.ScriptTarget.ES2020,
+    module: ts.ModuleKind.ESNext,
+    lib: ['ES2020'],
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    resolveJsonModule: true,
+    strict: true,
+    esModuleInterop: true,
+    skipLibCheck: true,
+    forceConsistentCasingInFileNames: true,
+    declaration: true,
+    declarationMap: true,
+    sourceMap: true,
+    outDir: './dist',
+    rootDir: './src',
+  },
+  include: ['src/**/*'],
+  exclude: ['node_modules', 'dist'],
+};
+
+export default config;
