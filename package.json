@@ -12,7 +12,7 @@
     "start:backend:local": "cd backend && NODE_ENV=development tsx src/index.ts",
     "start:frontend": "cd frontend && npm run build && vite preview",
     "build": "npm run build:backend && npm run build:frontend",
-    "build:backend": "cd backend && tsc && node dist/index.js",
+    "build:backend": "cd backend && npm run build",
     "build:frontend": "cd frontend && vite build",
     "test:e2e": "playwright test",
     "test:e2e:debug": "playwright test --debug",
