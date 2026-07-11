@@ -1,38 +1,48 @@
 import { test, expect } from '@playwright/test';
 
+/**
+ * ファイルアップロードのE2Eテスト
+ * S3相当のストレージ機能を検証
+ */
 test.describe('File Upload Flow', () => {
   test.beforeEach(async ({ page }) => {
+    // ページをロード
     await page.goto('/');
 
-    // Login first
+    // ログイン処理を実行
+    // メールアドレスを入力
     await page.locator('input[type="email"]').fill('test@example.com');
+    // パスワードを入力
     await page.locator('input[type="password"]').fill('password123');
+    // ログインボタンをクリック
     await page.locator('button[type="submit"]').click();
 
-    // Wait for chat page to load
+    // チャットページが読み込まれるまで待機
     await expect(page.locator('.chat-container')).toBeVisible({ timeout: 5000 });
   });
 
-  test('should display file upload button', async ({ page }) => {
+  test('ファイルアップロードボタンが表示される', async ({ page }) => {
+    // ファイルアップロードボタン（📎アイコン）が表示されていることを確認
     const fileUploadLabel = page.locator('label:has-text("📎")');
     await expect(fileUploadLabel).toBeVisible();
   });
 
-  test('should handle file upload', async ({ page }) => {
+  test('ファイルアップロード処理が実行される', async ({ page }) => {
+    // ファイル入力フィールドを取得
     const fileInput = page.locator('input[type="file"]');
 
-    // Create a test file
+    // テスト用のテキストファイルを作成
     const buffer = Buffer.from('This is a test file content for upload');
     const fileName = 'test.txt';
 
-    // Set file
+    // ファイルを設定
     await fileInput.setInputFiles({
       name: fileName,
       mimeType: 'text/plain',
       buffer: buffer,
     });
 
-    // Wait for file upload message to appear
+    // ファイルアップロード完了メッセージが表示されるまで待機
     await expect(page.locator(`text=File uploaded: ${fileName}`)).toBeVisible({ timeout: 5000 });
   });
 

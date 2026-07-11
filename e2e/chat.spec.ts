@@ -1,40 +1,55 @@
 import { test, expect } from '@playwright/test';
 
+/**
+ * チャットフローのE2Eテスト
+ * Bedrock相当のAI機能とDynamoDB相当のデータ保存を検証
+ */
 test.describe('Chat Flow', () => {
   test.beforeEach(async ({ page }) => {
+    // ページをロード
     await page.goto('/');
 
-    // Login first
+    // ログイン処理を実行
+    // メールアドレスを入力
     await page.locator('input[type="email"]').fill('test@example.com');
+    // パスワードを入力
     await page.locator('input[type="password"]').fill('password123');
+    // ログインボタンをクリック
     await page.locator('button[type="submit"]').click();
 
-    // Wait for chat page to load
+    // チャットページが読み込まれるまで待機
     await expect(page.locator('.chat-container')).toBeVisible({ timeout: 5000 });
   });
 
-  test('should display chat page after login', async ({ page }) => {
+  test('ログイン後にチャットページが表示される', async ({ page }) => {
+    // ページタイトルが表示されていることを確認
     await expect(page.locator('h1')).toContainText('AWS Blocks Chatbot');
+    // ログアウトボタンが表示されていることを確認
     await expect(page.locator('button:has-text("Logout")')).toBeVisible();
+    // メッセージコンテナが表示されていることを確認
     await expect(page.locator('.messages-container')).toBeVisible();
+    // メッセージ入力フィールドが表示されていることを確認
     await expect(page.locator('input[placeholder="Type a message..."]')).toBeVisible();
   });
 
-  test('should send and receive messages', async ({ page }) => {
+  test('メッセージを送受信できる', async ({ page }) => {
+    // メッセージ入力フィールドを取得
     const messageInput = page.locator('input[placeholder="Type a message..."]');
+    // 送信ボタンを取得
     const sendButton = page.locator('button:has-text("Send")');
 
-    // Send a message
+    // ユーザーメッセージを入力
     await messageInput.fill('Hello, chatbot!');
+    // 送信ボタンをクリック
     await sendButton.click();
 
-    // Message should appear in chat
+    // ユーザーが送信したメッセージが表示されることを確認
     await expect(page.locator('.message.user .message-content')).toContainText('Hello, chatbot!');
 
-    // Wait for AI response
+    // AI応答が生成されるまで待機（Bedrock相当）
     await expect(page.locator('.message.assistant')).toBeVisible({ timeout: 10000 });
 
-    // Response should contain meaningful content
+    // AI応答が意味のある内容を持つことを確認
     const assistantMessages = page.locator('.message.assistant .message-content');
     const messageCount = await assistantMessages.count();
     expect(messageCount).toBeGreaterThan(0);

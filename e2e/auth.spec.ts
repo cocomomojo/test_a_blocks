@@ -1,51 +1,64 @@
 import { test, expect } from '@playwright/test';
 
+/**
+ * 認証フローのE2Eテスト
+ * Cognito相当の認証機能を検証
+ */
 test.describe('Authentication Flow', () => {
   test.beforeEach(async ({ page }) => {
+    // ログインページに遷移
     await page.goto('/');
   });
 
-  test('should display login page', async ({ page }) => {
+  test('ログインページが表示される', async ({ page }) => {
+    // タイトルが表示されていることを確認
     await expect(page.locator('h1')).toContainText('AWS Blocks Chatbot');
+    // メールアドレス入力フィールドが表示されていることを確認
     await expect(page.locator('label:has-text("Email:")')).toBeVisible();
+    // パスワード入力フィールドが表示されていることを確認
     await expect(page.locator('label:has-text("Password:")')).toBeVisible();
   });
 
-  test('should show error for missing email', async ({ page }) => {
+  test('メールアドレスが空の場合、エラーが表示される', async ({ page }) => {
+    // パスワードのみ入力
     const passwordInput = page.locator('input[type="password"]');
     const submitButton = page.locator('button[type="submit"]');
 
     await passwordInput.fill('password123');
     await submitButton.click();
 
-    // HTML5 validation should prevent submission
+    // HTML5 バリデーションにより、メールアドレス入力フィールドがフォーカスされることを確認
     await expect(page.locator('input[type="email"]')).toBeFocused();
   });
 
-  test('should toggle between login and register', async ({ page }) => {
+  test('ログインと登録の切り替えができる', async ({ page }) => {
+    // 「新規アカウント作成」ボタンをクリック
     const toggleButton = page.locator('button:has-text("Create new account")');
     await toggleButton.click();
 
-    // Should show name field after toggling to register
+    // 登録画面に切り替わると、名前入力フィールドが表示される
     await expect(page.locator('label:has-text("Name:")')).toBeVisible();
 
-    // Toggle back to login
+    // 「既にアカウントを持っている」ボタンをクリック
     const toggleBackButton = page.locator('button:has-text("Already have an account")');
     await toggleBackButton.click();
 
-    // Name field should disappear
+    // 名前入力フィールドが消える
     const nameLabels = page.locator('label:has-text("Name:")');
     await expect(nameLabels).toHaveCount(0);
   });
 
-  test('should handle registration flow', async ({ page }) => {
-    // Switch to register
+  test('登録フロー（サインアップ）の処理', async ({ page }) => {
+    // 登録画面に切り替え
     const toggleButton = page.locator('button:has-text("Create new account")');
     await toggleButton.click();
 
-    // Fill in registration form
+    // 登録フォームに入力
+    // ユーザー名を入力
     await page.locator('input[type="text"]').fill('Test User');
+    // メールアドレスを入力
     await page.locator('input[type="email"]').fill(`test_${Date.now()}@example.com`);
+    // パスワードを入力
     await page.locator('input[type="password"]').fill('Password123!');
 
     const submitButton = page.locator('button[type="submit"]:visible');
