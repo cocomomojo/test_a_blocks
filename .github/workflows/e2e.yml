@@ -166,6 +166,12 @@ jobs:
       # Each workflow run publishes the latest test report to the root of GitHub Pages.
       # This ensures that https://cocomomojo.github.io/test_a_blocks/ always contains
       # the most recent test results.
+      #
+      # Trade-off: Previous test reports are deleted and not preserved in history.
+      # If you need to keep historical test results, consider:
+      # 1. Adding a timestamp or run number to destination_dir
+      # 2. Using keep_files: true and maintaining separate 'latest' and 'history' directories
+      # 3. Archiving test results to a separate storage service
 
     - name: Comment PR with Test Results
       if: github.event_name == 'pull_request' && always()

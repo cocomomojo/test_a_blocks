@@ -365,10 +365,12 @@ https://cocomomojo.github.io/test_a_blocks/
 
 - Pull Request コメントにも同URLが自動投稿されます。
 - GitHub Actions の Summary にも同URLが出力されます。
+- **重要**: 各ワークフロー実行で最新のテストレポートが同じURLに上書きされます。過去のテストレポートを保持する必要がある場合は、ワークフロー設定でレポートディレクトリを run 番号に基づいて分けるか、別の保存方法を検討してください。
 
 ### レポートURLを開く（CLI）
 
 ```bash
+# 以下のURLを自分のリポジトリに合わせて変更してください
 URL="https://cocomomojo.github.io/test_a_blocks/"
 echo "$URL"
 
