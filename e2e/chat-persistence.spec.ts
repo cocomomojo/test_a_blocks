@@ -29,7 +29,7 @@ test.describe('Chat Persistence and Data Management', () => {
 
     // 全メッセージが表示されていることを確認
     for (let i = 1; i <= 3; i++) {
-      await expect(page.locator(`text=メッセージ ${i}`)).toBeVisible();
+      await expect(page.locator('.message.user .message-content', { hasText: `メッセージ ${i}` })).toBeVisible();
     }
   });
 
@@ -48,7 +48,7 @@ test.describe('Chat Persistence and Data Management', () => {
     expect(messageCount).toBeGreaterThan(0);
 
     // 送信したメッセージが表示されていることを確認
-    await expect(page.locator(`text=${testMessage}`)).toBeVisible();
+    await expect(page.locator('.message.user .message-content', { hasText: testMessage })).toBeVisible();
   });
 
   test('AI応答が assistant ロールで表示される', async ({ page }) => {
@@ -134,7 +134,7 @@ test.describe('Chat Persistence and Data Management', () => {
 
     // 全メッセージが表示されていることを確認
     for (const msg of messages) {
-      await expect(page.locator(`text=${msg}`)).toBeVisible();
+      await expect(page.locator('.message.user .message-content', { hasText: msg })).toBeVisible();
     }
 
     // ユーザーメッセージとAIメッセージが混在していることを確認

@@ -352,13 +352,13 @@ E2E workflow が `main` で完了すると、Playwright レポートは GitHub P
 ### URL 形式
 
 ```text
-https://<owner>.github.io/<repo>/reports/<run_number>/
+https://<owner>.github.io/<repo>/
 ```
 
 ### このリポジトリの例
 
 ```text
-https://cocomomojo.github.io/test_a_blocks/reports/<run_number>/
+https://cocomomojo.github.io/test_a_blocks/
 ```
 
 補足:
@@ -366,18 +366,16 @@ https://cocomomojo.github.io/test_a_blocks/reports/<run_number>/
 - Pull Request コメントにも同URLが自動投稿されます。
 - GitHub Actions の Summary にも同URLが出力されます。
 
-### 最新レポートURLを自動で開く（CLI）
+### レポートURLを開く（CLI）
 
 ```bash
-RUN_NUMBER=$(gh run list --workflow e2e.yml --branch main --limit 1 --json number -q '.[0].number')
-URL="https://cocomomojo.github.io/test_a_blocks/reports/${RUN_NUMBER}/"
+URL="https://cocomomojo.github.io/test_a_blocks/"
 echo "$URL"
 "$BROWSER" "$URL"
 ```
 
 補足:
 
-- `gh auth login` 済みであることが前提です。
 - URLだけ確認したい場合は `echo "$URL"` まででOKです。
 
 ## スクリーンショットで見る機能とE2E検証
