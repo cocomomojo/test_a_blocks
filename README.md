@@ -348,37 +348,54 @@ app.use('/api/email', emailRouter);    // メール通知
 
 ## Workflow 実行後の GitHub Pages URL
 
+⚠️ **重要な注意事項**
+
+E2E workflow が `main` ブランチで実行されると、GitHub Pages のルートディレクトリが上書きされます。このリポジトリで GitHub Pages に他のコンテンツを保存している場合は、別の方法での公開を検討してください。
+
 E2E workflow が `main` で完了すると、Playwright レポートは GitHub Pages に公開されます。
 ### URL 形式
 
 ```text
-https://<owner>.github.io/<repo>/reports/<run_number>/
+https://<owner>.github.io/<repo>/
 ```
 
 ### このリポジトリの例
 
 ```text
-https://cocomomojo.github.io/test_a_blocks/reports/<run_number>/
+https://cocomomojo.github.io/test_a_blocks/
 ```
 
 補足:
 
 - Pull Request コメントにも同URLが自動投稿されます。
 - GitHub Actions の Summary にも同URLが出力されます。
+- **重要**: 各ワークフロー実行で最新のテストレポートが同じURLに上書きされます。
+- **変更履歴**: 以前のバージョンでは run 番号に基づいたURLが使用されていました（例: `reports/${{ github.run_number }}/`）。このバージョンでは、固定URLで常に最新のレポートにアクセスできるようになりました。
+- **過去のテストレポートを保持する必要がある場合**: ワークフロー設定で以下の変更を行ってください:
+  - `destination_dir: reports/${{ github.run_number }}` に変更
+  - `keep_files: true` に変更
 
-### 最新レポートURLを自動で開く（CLI）
+### レポートURLを開く（CLI）
 
 ```bash
-RUN_NUMBER=$(gh run list --workflow e2e.yml --branch main --limit 1 --json number -q '.[0].number')
-URL="https://cocomomojo.github.io/test_a_blocks/reports/${RUN_NUMBER}/"
+# 以下のURLを自分のリポジトリに合わせて変更してください
+URL="https://cocomomojo.github.io/test_a_blocks/"
 echo "$URL"
-"$BROWSER" "$URL"
+
+# macOS
+open "$URL"
+
+# Linux
+xdg-open "$URL"
+
+# Windows (PowerShell)
+Start-Process "$URL"
 ```
 
 補足:
 
-- `gh auth login` 済みであることが前提です。
 - URLだけ確認したい場合は `echo "$URL"` まででOKです。
+- 自動でブラウザを開きたい場合は環境に応じて上記コマンドを使用してください。
 
 ## スクリーンショットで見る機能とE2E検証
 
