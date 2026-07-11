@@ -350,7 +350,7 @@ app.use('/api/email', emailRouter);    // メール通知
 
 ⚠️ **重要な注意事項**
 
-E2E workflow が実行されると、GitHub Pages のルートディレクトリが上書きされます。このリポジトリで GitHub Pages に他のコンテンツを保存している場合は、別の方法での公開を検討してください。
+E2E workflow が `main` ブランチで実行されると、GitHub Pages のルートディレクトリが上書きされます。このリポジトリで GitHub Pages に他のコンテンツを保存している場合は、別の方法での公開を検討してください。
 
 E2E workflow が `main` で完了すると、Playwright レポートは GitHub Pages に公開されます。
 ### URL 形式
@@ -371,7 +371,9 @@ https://cocomomojo.github.io/test_a_blocks/
 - GitHub Actions の Summary にも同URLが出力されます。
 - **重要**: 各ワークフロー実行で最新のテストレポートが同じURLに上書きされます。
 - **変更履歴**: 以前のバージョンでは run 番号に基づいたURLが使用されていました（例: `reports/${{ github.run_number }}/`）。このバージョンでは、固定URLで常に最新のレポートにアクセスできるようになりました。
-- **過去のテストレポートを保持する必要がある場合**: ワークフロー設定で `destination_dir: reports/${{ github.run_number }}`、`keep_files: true` に変更してください。
+- **過去のテストレポートを保持する必要がある場合**: ワークフロー設定で以下の変更を行ってください:
+  - `destination_dir: reports/${{ github.run_number }}` に変更
+  - `keep_files: true` に変更
 
 ### レポートURLを開く（CLI）
 
