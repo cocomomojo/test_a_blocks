@@ -371,12 +371,21 @@ https://cocomomojo.github.io/test_a_blocks/
 ```bash
 URL="https://cocomomojo.github.io/test_a_blocks/"
 echo "$URL"
-"$BROWSER" "$URL"
+
+# macOS
+open "$URL"
+
+# Linux
+xdg-open "$URL"
+
+# Windows (PowerShell)
+start "$URL"
 ```
 
 補足:
 
 - URLだけ確認したい場合は `echo "$URL"` まででOKです。
+- 自動でブラウザを開きたい場合は環境に応じて上記コマンドを使用してください。
 
 ## スクリーンショットで見る機能とE2E検証
 
