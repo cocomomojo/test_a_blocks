@@ -348,6 +348,9 @@ app.use('/api/email', emailRouter);    // メール通知
 
 ## Workflow 実行後の GitHub Pages URL
 
+⚠️ **重要な注意事項**
+E2E workflow が実行されると、GitHub Pages のルートディレクトリが上書きされます。このリポジトリで GitHub Pages に他のコンテンツを保存している場合は、別の方法での公開を検討してください。
+
 E2E workflow が `main` で完了すると、Playwright レポートは GitHub Pages に公開されます。
 ### URL 形式
 
