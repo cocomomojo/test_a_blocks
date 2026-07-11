@@ -27,6 +27,12 @@ export default defineConfig({
       port: 3001,
       reuseExistingServer: !process.env.CI,
       timeout: 120 * 1000,
+      // E2E テスト実行時は aws-blocks エミュレーションモードを使用
+      env: {
+        ...process.env,
+        USE_AWS_BLOCKS_EMULATION: 'true',
+        NODE_ENV: 'test',
+      },
     },
     {
       command: 'npm run start:frontend',

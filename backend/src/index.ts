@@ -6,10 +6,12 @@ import messagesRouter from './routes/messages.js';
 import filesRouter from './routes/files.js';
 import aiRouter from './routes/ai.js';
 import emailRouter from './routes/email.js';
+import { getBlocksMode } from './blocks/index.js';
 
 const app: Express = express();
 const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+const USE_AWS_BLOCKS_EMULATION = process.env.USE_AWS_BLOCKS_EMULATION !== 'false';
 
 // Middleware
 app.use(cors({
@@ -38,9 +40,12 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 
 // Health check endpoint
 app.get('/health', (_req: Request, res: Response) => {
+  const blocksMode = getBlocksMode();
   res.json({
     status: 'ok',
     environment: NODE_ENV,
+    blocksMode: blocksMode.description,
+    isEmulation: blocksMode.isEmulation,
     timestamp: new Date().toISOString(),
   });
 });
@@ -69,14 +74,16 @@ app.use((_req: Request, res: Response) => {
 
 // Start server
 app.listen(PORT, () => {
+  const blocksMode = getBlocksMode();
   console.log(`
-╔════════════════════════════════════════╗
-║  AWS Blocks Chatbot Backend            ║
-║  Express Server Listening              ║
-╚════════════════════════════════════════╝
+╔════════════════════════════════════════════════════════════════╗
+║  AWS Blocks Chatbot Backend                                    ║
+║  Express Server Listening                                      ║
+╚════════════════════════════════════════════════════════════════╝
 
 Environment: ${NODE_ENV}
 Port: ${PORT}
+Blocks Mode: ${blocksMode.description}
 Base URL: http://localhost:${PORT}
 
 Endpoints:

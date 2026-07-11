@@ -10,6 +10,60 @@ AWS Blocks を使ったチャットアプリのローカルエミュレーショ
 - ☁️ AWS サービス相当の機能をローカルでエミュレート
 - 🔁 同じ API 設計のまま本番構成へ寄せやすい
 
+## 🆕 最新改善内容（このバージョン）
+
+### E2E環境での aws-blocks 自動切り替え
+
+本プロジェクトはE2E（End-to-End）テスト用プロジェクトです。環境変数 `USE_AWS_BLOCKS_EMULATION` で、AWS Blocks のエミュレーション モードを制御できるようになりました。
+
+```bash
+# E2E テスト実行時は自動的に aws-blocks エミュレーションが有効になります
+npm run test:e2e
+
+# または手動で環境変数を指定
+USE_AWS_BLOCKS_EMULATION=true npm run test:e2e
+
+# 本番AWS環境を使う場合（デフォルト）
+USE_AWS_BLOCKS_EMULATION=false npm run start:backend:local
+```
+
+### 実装の詳細化
+
+各 AWS Blocks クラスに詳細な日本語コメントを追加し、実装内容を明確にしました：
+
+- **bb-auth.ts**: Cognito モック実装に詳細なコメント追加
+- **bb-distributed-table.ts**: DynamoDB モック実装に API マッピングコメント追加
+- **bb-storage.ts**: S3 モック実装に動作説明コメント追加
+- **bb-ai.ts**: Bedrock モック実装にモデル選択情報追加
+
+### E2E テストの拡張
+
+新しい E2E テストとコメント追加：
+
+- **chat-persistence.spec.ts**: メッセージの永続性、複数メッセージ処理、エラーハンドリングを検証
+- **既存テストへの日本語コメント**: auth.spec.ts, chat.spec.ts, file-upload.spec.ts, ai-response.spec.ts に日本語コメント追加
+
+### Backend ログの充実
+
+Backend 起動時の情報表示を改善：
+
+```
+Blocks Mode: ローカルエミュレーション
+```
+
+Health Check エンドポイントでも Blocks Mode が確認可能：
+
+```bash
+curl http://localhost:3001/health
+# {
+#   "status": "ok",
+#   "environment": "test",
+#   "blocksMode": "ローカルエミュレーション",
+#   "isEmulation": true,
+#   "timestamp": "..."
+# }
+```
+
 ## まず全体像をつかむ
 
 ```mermaid
@@ -68,31 +122,80 @@ AWS Blocks の説明に合わせて、ここでは次の順で例を示します
 
 ```ts
 // backend/src/blocks/index.ts
-import { DistributedTable } from '../aws-blocks/bb-distributed-table';
-import { Storage } from '../aws-blocks/bb-storage';
-import { Auth } from '../aws-blocks/bb-auth';
-import { AI } from '../aws-blocks/bb-ai';
 
+// 環境変数で aws-blocks エミュレーションの使用を制御
+// E2E環境: USE_AWS_BLOCKS_EMULATION=true
+// 本番環境: USE_AWS_BLOCKS_EMULATION=false
+const USE_AWS_BLOCKS_EMULATION = process.env.USE_AWS_BLOCKS_EMULATION !== 'false';
+
+if (USE_AWS_BLOCKS_EMULATION) {
+  console.log('[AWS Blocks] Using LOCAL EMULATION mode');
+} else {
+  console.log('[AWS Blocks] Using PRODUCTION AWS SERVICES mode');
+}
+
+// チャット履歴とメッセージを管理するテーブル
+// E2E環境: メモリ上のMapでエミュレート
+// 本番環境: DynamoDB に接続
 export const chatTable = new DistributedTable({
     name: 'ChatMessages',
     partitionKey: { name: 'chatId', type: 'string' },
     sortKey: { name: 'timestamp', type: 'number' },
 });
 
+// ファイルアップロード用ストレージ（S3 相当）
+// E2E環境: メモリ上のMapでエミュレート
+// 本番環境: Amazon S3 に接続
 export const fileStorage = new Storage({ name: 'ChatFiles' });
+
+// 認証機能（Cognito 相当）
+// E2E環境: モック実装で固定トークン生成
+// 本番環境: Amazon Cognito に接続
 export const auth = new Auth({ name: 'ChatBotAuth' });
-export const aiModel = new AI({ name: 'ChatBotAI', modelType: 'text-generation' });
+
+// AI/Bedrock 相当（LLM レスポンス生成）
+// E2E環境: モック応答を返す
+// 本番環境: Amazon Bedrock に接続して実際のLLMモデルを使用
+export const aiModel = new AI({ 
+  name: 'ChatBotAI', 
+  modelType: 'text-generation',
+  temperature: 0.7,
+  maxTokens: 512 
+});
+
+// エミュレーション状態をエクスポート（デバッグ用）
+export const getBlocksMode = () => ({
+  isEmulation: USE_AWS_BLOCKS_EMULATION,
+  description: USE_AWS_BLOCKS_EMULATION ? 'ローカルエミュレーション' : '本番AWS環境',
+});
 ```
 
 ### 🔐 Cognito 相当（Auth）利用例
 
 ```ts
 // backend/src/aws-blocks/bb-auth.ts
+
+/**
+ * E2E環境: タイムスタンプベースのトークンを生成
+ * 本番環境では Cognito が JWT トークンを返す
+ * 
+ * 本番環境での実装例:
+ * const response = await cognitoClient.initiateAuth({
+ *   ClientId: this.clientId,
+ *   AuthFlow: 'USER_PASSWORD_AUTH',
+ *   AuthParameters: {
+ *     USERNAME: email,
+ *     PASSWORD: password
+ *   }
+ * });
+ */
 async signIn(email: string, password: string): Promise<{ token: string }> {
     return { token: `token-${Date.now()}` };
 }
 
 // backend/src/routes/auth.ts
+
+// Auth Block を経由して認証（Cognito 相当）
 const { token } = await auth.signIn(email, password);
 const verified = await auth.verifyToken(token);
 ```
@@ -100,7 +203,32 @@ const verified = await auth.verifyToken(token);
 ### 🗃️ DynamoDB 相当（DistributedTable）利用例
 
 ```ts
+// backend/src/aws-blocks/bb-distributed-table.ts
+
+/**
+ * パーティションキーで条件に合うアイテム群を検索
+ * 
+ * E2E環境: メモリ内Mapから条件に合うアイテムをフィルタ
+ * 本番環境では DynamoDB の Query API を呼び出す:
+ * const result = await dynamoDbClient.query({
+ *   TableName: this.name,
+ *   KeyConditionExpression: 'pk = :pk',
+ *   ExpressionAttributeValues: {
+ *     ':pk': { S: partitionKeyValue }
+ *   }
+ * });
+ */
+async query(partitionKeyValue: string): Promise<any[]> {
+    const prefix = partitionKeyValue + '#';
+    return Array.from(this.data.values()).filter(item => {
+        const key = this.getKey(item);
+        return key.startsWith(prefix) || key === partitionKeyValue;
+    });
+}
+
 // backend/src/routes/messages.ts
+
+// テーブルにアイテムを追加
 await chatTable.put({
     chatId,
     timestamp,
@@ -110,31 +238,37 @@ await chatTable.put({
     role,
 });
 
-// backend/src/aws-blocks/bb-distributed-table.ts
-async query(partitionKeyValue: string): Promise<any[]> {
-    const prefix = partitionKeyValue + '#';
-    return Array.from(this.data.values()).filter((item) => {
-        const key = this.getKey(item);
-        return key.startsWith(prefix) || key === partitionKeyValue;
-    });
-}
+// パーティションキーで検索
+const messages = await chatTable.query(chatId);
 ```
 
 ### 📦 S3 相当（Storage）利用例
 
 ```ts
 // backend/src/aws-blocks/bb-storage.ts
+
+/**
+ * ストレージにオブジェクトを保存する
+ * 
+ * E2E環境: メモリ内のMapにデータを保存
+ * 本番環境では S3 の PutObject API を呼び出す:
+ * await s3Client.putObject({
+ *   Bucket: this.bucketName,
+ *   Key: key,
+ *   Body: data
+ * });
+ */
 async put(key: string, data: Buffer | string): Promise<void> {
     const buffer = typeof data === 'string' ? Buffer.from(data) : data;
     this.files.set(key, buffer);
 }
 
-async get(key: string): Promise<Buffer | null> {
-    return this.files.get(key) || null;
-}
-
 // backend/src/routes/files.ts
+
+// ファイルをストレージに保存
 await fileStorage.put(fileKey, fileContent);
+
+// ストレージからファイルを取得
 const content = await fileStorage.get(meta.fileKey);
 ```
 
@@ -142,19 +276,43 @@ const content = await fileStorage.get(meta.fileKey);
 
 ```ts
 // backend/src/aws-blocks/bb-ai.ts
+
+/**
+ * E2E環境: モック応答を返す
+ * 本番環境では Amazon Bedrock に接続:
+ * const response = await bedrockClient.invokeModel({
+ *   modelId: this.modelId,
+ *   body: JSON.stringify({ prompt, ... })
+ * });
+ */
 async invoke(prompt: string): Promise<string> {
     return `Mock AI response to: "${prompt}"`;
 }
 
 // backend/src/routes/ai.ts
+
+// AI Block を経由して応答生成（Bedrock 相当）
 const response = await aiModel.invoke(lastUserMessage);
+
+// ストリーミング応答
 const chunks = await aiModel.invokeStreaming(lastUserMessage);
+for await (const chunk of chunks) {
+  res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+}
 ```
 
 ### 📧 SES 相当（メール通知）利用例
 
 ```ts
 // backend/src/routes/email.ts
+
+// E2E環境: コンソールログに出力
+// 本番環境では Amazon SES でメール送信:
+// await sesClient.sendEmail({
+//   Source: fromAddress,
+//   Destination: { ToAddresses: [to] },
+//   Message: { Subject: { Data: subject }, Body: { Html: { Data: body } } }
+// });
 console.log(`
 [EMAIL NOTIFICATION]
 ID: ${emailId}
@@ -168,12 +326,14 @@ Body: ${body}
 
 ```ts
 // backend/src/index.ts
-app.use('/api/auth', authRouter);
-app.use('/api/chats', chatsRouter);
-app.use('/api/messages', messagesRouter);
-app.use('/api/files', filesRouter);
-app.use('/api/ai', aiRouter);
-app.use('/api/email', emailRouter);
+
+// Express ルーティングで Lambda 相当の処理を実装
+app.use('/api/auth', authRouter);      // 認証関連の処理
+app.use('/api/chats', chatsRouter);    // チャット管理
+app.use('/api/messages', messagesRouter); // メッセージ処理
+app.use('/api/files', filesRouter);    // ファイル処理
+app.use('/api/ai', aiRouter);          // AI応答生成
+app.use('/api/email', emailRouter);    // メール通知
 ```
 
 ### ✅ 実装整合性チェック結果（README更新時点）
@@ -183,7 +343,8 @@ app.use('/api/email', emailRouter);
 | Auth Block (`auth`) の利用 | ✅ 一致 | `/api/auth/register/login/logout/verify` から `signUp/signIn/signOut/verifyToken` を呼び出し |
 | Storage Block (`fileStorage`) の利用 | ✅ 一致 | `/api/files/upload/download/delete/chat` で `put/get/delete` とメタデータ管理を実行 |
 | AI Block (`aiModel`) の利用 | ✅ 一致 | `/api/ai/generate` で `invoke`、`/api/ai/stream` で `invokeStreaming` を使用 |
-| DistributedTable (`chatTable`) の利用 | ✅ 一致 | `messages` や `chats` の一部で `put` を実際に使用 |
+| DistributedTable (`chatTable`) の利用 | ✅ 一致 | `messages` や `chats` の一部で `put/query/delete` を実装 |
+| E2E環境切り替え | ✅ 実装完了 | `USE_AWS_BLOCKS_EMULATION` 環境変数で自動制御 |
 
 ## Workflow 実行後の GitHub Pages URL
 
@@ -231,6 +392,9 @@ echo "$URL"
 |---|---|---|
 | Email/Password 入力 + Login ボタン | Cognito 相当の認証フロー | ログイン表示、必須入力、ログイン成功、localStorage 保存、ログアウト |
 
+**関連 E2E テスト:**
+- `e2e/auth.spec.ts` - ログインページ表示、入力検証、ログイン機能
+
 ### 登録画面（切り替え）
 
 ![登録画面](docs/screenshots/02-register-page.png)
@@ -238,6 +402,9 @@ echo "$URL"
 | 画面で見えるもの | ここでエミュレートされる AWS 相当 | E2E で検証していること |
 |---|---|---|
 | Name 項目の表示切り替え | Cognito 相当の登録処理 | Login/Register の切替、登録後にログイン画面へ戻ること |
+
+**関連 E2E テスト:**
+- `e2e/auth.spec.ts` - 登録フォームの表示、バリデーション
 
 ### チャット画面（初期表示）
 
@@ -247,13 +414,21 @@ echo "$URL"
 |---|---|---|
 | メッセージ欄、送信欄、Logout | DynamoDB 相当のチャット/メッセージ管理 | チャット画面描画、入力欄表示、複数メッセージ処理、時刻表示 |
 
+**関連 E2E テスト:**
+- `e2e/chat.spec.ts` - チャットページ表示、メッセージ表示
+- `e2e/chat-persistence.spec.ts` - メッセージ永続性、複数メッセージ管理
+
 ### チャット + AI応答
 
 ![AI応答付きチャット画面](docs/screenshots/04-chat-with-ai-response.png)
 
 | 画面で見えるもの | ここでエミュレートされる AWS 相当 | E2E で検証していること |
 |---|---|---|
-| ユーザーメッセージとAI返信 | Bedrock 相当の応答生成 | 送信後に assistant メッセージが表示されること、応答が空でないこと |
+| ユーザーメッセージとAI返信 | Bedrock 相当の応答生成 | 送信後に assistant メッセージが表示されること、応答が空でないこと、メッセージロール判定 |
+
+**関連 E2E テスト:**
+- `e2e/ai-response.spec.ts` - AI応答生成、複数メッセージコンテキスト
+- `e2e/chat.spec.ts` - メッセージ送受信フロー
 
 ### ファイル添付後の画面
 
@@ -261,16 +436,20 @@ echo "$URL"
 
 | 画面で見えるもの | ここでエミュレートされる AWS 相当 | E2E で検証していること |
 |---|---|---|
-| `File uploaded` メッセージ | S3 相当の保存処理 | 添付ボタン表示、アップロード成功表示、複数ファイル/拡張子対応 |
+| `File uploaded` メッセージ | S3 相当の保存処理 | 添付ボタン表示、アップロード成功表示、複数ファイル/拡張子対応、ファイルメタデータ保存 |
+
+**関連 E2E テスト:**
+- `e2e/file-upload.spec.ts` - ファイルアップロード、複数ファイル対応、異なる拡張子対応
 
 ## E2E テスト仕様マップ
 
-| テストファイル | 主な対象 | 代表的な確認項目 |
-|---|---|---|
-| `e2e/auth.spec.ts` | 認証 | ログイン表示、登録切替、ログイン成功、トークン保存、ログアウト |
-| `e2e/chat.spec.ts` | チャット基本機能 | メッセージ送受信、複数送信、時刻表示、送信中の状態 |
-| `e2e/file-upload.spec.ts` | ファイル添付 | 添付 UI、アップロード成功、複数/複数形式対応 |
-| `e2e/ai-response.spec.ts` | AI 応答 | 応答生成、履歴継続、あいさつ/質問への返答 |
+| テストファイル | 主な対象 | 代表的な確認項目 | テスト数 |
+|---|---|---|---|
+| `e2e/auth.spec.ts` | 認証 | ログイン表示、登録切替、ログイン成功、トークン保存、ログアウト | 複数 |
+| `e2e/chat.spec.ts` | チャット基本機能 | メッセージ送受信、複数送信、時刻表示、送信中の状態 | 複数 |
+| `e2e/chat-persistence.spec.ts` | メッセージ永続性 | 複数メッセージ管理、ユーザー/AIメッセージ区別、入力フィールドクリア、エラーハンドリング | 8個以上 |
+| `e2e/file-upload.spec.ts` | ファイル添付 | 添付 UI、アップロード成功、複数/複数形式対応 | 複数 |
+| `e2e/ai-response.spec.ts` | AI 応答 | 応答生成、履歴継続、あいさつ/質問への返答、ロール判定 | 複数 |
 
 ## セットアップ
 
@@ -290,108 +469,108 @@ cd .. && npx playwright install
 
 ## 実行手順
 
-### 開発起動
+### 開発起動（同時実行）
 
 ```bash
 # Backend + Frontend を同時起動
+# 自動的に USE_AWS_BLOCKS_EMULATION=true が適用されます
 npm run dev:all
 ```
 
-### E2E 実行
+### E2E テスト実行
 
 ```bash
-# 全E2E
+# E2E テストを実行（Playwright）
+# 自動的に aws-blocks エミュレーションモードで起動
 npm run test:e2e
 
-# UIデバッグ
+# UI モードで対話的にテストを確認
 npm run test:e2e:ui
 
-# ステップ実行デバッグ
+# デバッグモードで実行
 npm run test:e2e:debug
 ```
 
-## API 一覧
+### Backend のみ起動（本番 AWS 環境向け）
 
-### Auth
+```bash
+# ローカルエミュレーションモード
+USE_AWS_BLOCKS_EMULATION=true npm run start:backend:local
 
-| Method | Endpoint | 説明 |
-|---|---|---|
-| POST | `/api/auth/register` | ユーザー登録 |
-| POST | `/api/auth/login` | ログイン |
-| POST | `/api/auth/logout` | ログアウト |
-| GET | `/api/auth/verify` | トークン検証 |
+# 本番 AWS 環境モード（AWS SDK が必要）
+USE_AWS_BLOCKS_EMULATION=false npm run start:backend:local
+```
 
-### Chats
+### Frontend のみ起動
 
-| Method | Endpoint | 説明 |
-|---|---|---|
-| POST | `/api/chats` | チャット作成 |
-| GET | `/api/chats` | チャット一覧 |
-| GET | `/api/chats/:chatId` | チャット詳細 |
-| PUT | `/api/chats/:chatId` | チャット更新 |
-| DELETE | `/api/chats/:chatId` | チャット削除 |
+```bash
+cd frontend
+npm run dev
+```
 
-### Messages
+## ビルド
 
-| Method | Endpoint | 説明 |
-|---|---|---|
-| POST | `/api/messages` | メッセージ送信 |
-| GET | `/api/messages` | メッセージ一覧 |
-| PUT | `/api/messages/:messageId` | メッセージ更新 |
-| DELETE | `/api/messages/:messageId` | メッセージ削除 |
+```bash
+npm run build
+```
 
-### Files
+### Backend ビルド
 
-| Method | Endpoint | 説明 |
-|---|---|---|
-| POST | `/api/files/upload` | ファイルアップロード |
-| GET | `/api/files/download/:fileId` | ダウンロード |
-| DELETE | `/api/files/:fileId` | 削除 |
-| GET | `/api/files/chat/:chatId` | チャットのファイル一覧 |
+```bash
+cd backend && npm run build
+```
 
-### AI
+### Frontend ビルド
 
-| Method | Endpoint | 説明 |
-|---|---|---|
-| POST | `/api/ai/generate` | AI応答生成 |
-| POST | `/api/ai/stream` | ストリーミング応答 |
-| GET | `/api/ai/models` | モデル一覧 |
+```bash
+cd frontend && vite build
+```
 
-### Email
+## 型チェック
 
-| Method | Endpoint | 説明 |
-|---|---|---|
-| POST | `/api/email/send` | メール送信 |
-| GET | `/api/email/status/:emailId` | 送信ステータス |
-| POST | `/api/email/notify-user` | ユーザー通知 |
+```bash
+npm run type-check
+```
 
 ## トラブルシューティング
 
-### `port 3001 is already in use`
+### E2E テストが失敗する場合
 
-```bash
-lsof -i :3001
-kill -9 <PID>
-```
+1. 既存サーバーが起動していないか確認
+   ```bash
+   lsof -i :3000 :3001  # macOS/Linux
+   netstat -ano | findstr :3000 :3001  # Windows
+   ```
 
-### Playwright が失敗する
+2. ポートをクリア
+   ```bash
+   kill -9 <PID>  # macOS/Linux
+   taskkill /PID <PID> /F  # Windows
+   ```
 
-```bash
-npx playwright install --with-deps
-npm run test:e2e:ui
-```
+3. 再度テスト実行
+   ```bash
+   npm run test:e2e
+   ```
 
-## 参考リンク
+### Backend が起動しない場合
 
-- [AWS Blocks 公式プロダクトページ](https://aws.amazon.com/jp/products/developer-tools/blocks/)
-- [AWS Blocks 公式GitHubリポジトリ](https://github.com/aws-devtools-labs/aws-blocks)
-- [AWS Blocks Developer Guide: What is AWS Blocks?](https://docs.aws.amazon.com/blocks/latest/devguide/what-is-blocks.html)
-- [AWS Blocks 紹介記事 (Zenn)](https://zenn.dev/aws_japan/articles/aws-blocks-ai-agent-intro)
-- [AWS Blocks 調査レポート(ポちのツール情報収集サイト)](https://aegisfleet.github.io/tool-survey-report/reports/aws-blocks/)
-- [Playwright Documentation](https://playwright.dev/)
-- [Express](https://expressjs.com/)
-- [React](https://react.dev/)
-- [Vite](https://vitejs.dev/)
+1. Node.js バージョン確認
+   ```bash
+   node --version  # 18 以上を確認
+   ```
+
+2. 依存関係を再インストール
+   ```bash
+   cd backend && rm -rf node_modules package-lock.json
+   npm install
+   cd ..
+   ```
+
+3. TypeScript エラーをチェック
+   ```bash
+   cd backend && npm run type-check
+   ```
 
 ## ライセンス
 
