@@ -387,7 +387,7 @@ open "$URL"
 xdg-open "$URL"
 
 # Windows (PowerShell)
-start "$URL"
+Start-Process "$URL"
 ```
 
 補足:
