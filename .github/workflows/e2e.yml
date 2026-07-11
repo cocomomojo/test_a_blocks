@@ -175,7 +175,7 @@ jobs:
       # 4. Only use GitHub Pages for the latest report and archive history elsewhere
       #
       # WARNING: If this repository uses GitHub Pages for other purposes (e.g., project documentation),
-      # this deployment will overwrite that content. Consider using a dedicated branch or organization 
+      # this deployment will overwrite that content. Consider using a dedicated branch or organization-level
       # GitHub Pages site instead of repository GitHub Pages for test reports.
 
     - name: Comment PR with Test Results
