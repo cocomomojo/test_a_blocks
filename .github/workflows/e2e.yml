@@ -168,10 +168,15 @@ jobs:
       # the most recent test results.
       #
       # Trade-off: Previous test reports are deleted and not preserved in history.
-      # If you need to keep historical test results, consider:
-      # 1. Adding a timestamp or run number to destination_dir
-      # 2. Using keep_files: true and maintaining separate 'latest' and 'history' directories
-      # 3. Archiving test results to a separate storage service
+      # If you need to keep historical test results, consider alternatives:
+      # 1. Change this to use `keep_files: true` and `destination_dir: reports/${{ github.run_number }}`
+      # 2. Maintain a separate 'latest' link to the current report
+      # 3. Archive test results to a separate storage service
+      # 4. Only use GitHub Pages for the latest report and archive history elsewhere
+      #
+      # WARNING: If this repository uses GitHub Pages for other purposes (e.g., project documentation),
+      # this deployment will overwrite that content. Consider using a dedicated branch or organization 
+      # GitHub Pages site instead of repository GitHub Pages for test reports.
 
     - name: Comment PR with Test Results
       if: github.event_name == 'pull_request' && always()
