@@ -98,10 +98,11 @@ test.describe('Chat Persistence and Data Management', () => {
     // 空のメッセージを送信しようとする
     const initialMessageCount = await page.locator('.message').count();
     await messageInput.fill('   ');  // スペースのみ
-    await sendButton.click();
-    await page.waitForTimeout(300);
+    
+    // スペースのみの場合、送信ボタンは無効になるはず
+    await expect(sendButton).toBeDisabled();
 
-    // メッセージ数が変わらないことを確認
+    // メッセージ数が変わらないことを確認（ボタンが無効なので送信されない）
     const finalMessageCount = await page.locator('.message').count();
     // トリムされたメッセージは送信されないはずなので、初期メッセージ（ユーザー+AI）からは増えない
     expect(finalMessageCount).toBeLessThanOrEqual(initialMessageCount + 1);
